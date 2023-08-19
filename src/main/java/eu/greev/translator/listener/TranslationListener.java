@@ -21,8 +21,8 @@ import java.awt.*;
 @Slf4j
 @RequiredArgsConstructor
 public class TranslationListener extends ListenerAdapter {
-    private final Translator translator = Main.getTranslator();
     private final MessageEmbed defaultEmbed = new EmbedBuilder().setColor(new Color(63, 226, 69, 255)).build();
+    private final Translator translator = Main.getTranslator();
 
     @Override
     public void onMessageContextInteraction(MessageContextInteractionEvent event) {
@@ -31,7 +31,7 @@ public class TranslationListener extends ListenerAdapter {
         Message message = event.getTarget();
         TextResult result;
         try {
-            result = getTranslatedResult(message);
+            result = getTranslatedResult(message, event.getUser().getName());
         } catch (TranslationLimitReachedException e) {
             event.reply("Translating this message would exceed the monthly translation limit.").queue();
             return;
@@ -51,12 +51,12 @@ public class TranslationListener extends ListenerAdapter {
     public void onMessageReceived(MessageReceivedEvent event) {
         MessageReference reference = event.getMessage().getMessageReference();
         if (!event.getMessage().getMentions().isMentioned(event.getJDA().getSelfUser(), Message.MentionType.USER)
-                || reference == null) return;
+                || reference == null || event.getAuthor().equals(event.getJDA().getSelfUser())) return;
 
         Message message = reference.resolve().complete();
         TextResult result;
         try {
-            result = getTranslatedResult(message);
+            result = getTranslatedResult(message, event.getAuthor().getName());
         } catch (TranslationLimitReachedException e) {
             event.getMessage().reply("Translating this message would exceed the monthly translation limit.").queue();
             return;
@@ -68,14 +68,14 @@ public class TranslationListener extends ListenerAdapter {
         message.reply(result.getText()).queue();
     }
 
-    private TextResult getTranslatedResult(Message message) throws TranslationLimitReachedException {
+    private TextResult getTranslatedResult(Message message, String requester) throws TranslationLimitReachedException {
         String toTranslate = message.getContentRaw();
         try {
             Usage.Detail character = translator.getUsage().getCharacter();
             if (character != null && (character.getCount() + toTranslate.split(" ").length) > character.getLimit()) {
                 throw new TranslationLimitReachedException("The translation word limit of " + character.getLimit() + " got reached.");
             }
-
+            log.info(requester + " requested a translation.");
             return translator.translateText(toTranslate, null, "EN-GB");
         } catch (DeepLException | InterruptedException e) {
             log.error("Could not translate text:", e);
