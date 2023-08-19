@@ -42,3 +42,9 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+/.idea/.name
+/.idea/gradle.xml
+/.idea/sonarlint/issuestore/index.pb
+/.idea/misc.xml
+/.idea/vcs.xml
+/.idea/workspace.xml
