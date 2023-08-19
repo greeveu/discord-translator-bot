@@ -19,13 +19,15 @@ import org.apache.logging.log4j.util.Strings;
 import org.simpleyaml.configuration.file.YamlFile;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 
 @Slf4j
 public class Main {
     @Getter private static Translator translator = null;
-    private static final List<String> PATHS = List.of("token", "auth");
+    private static final List<String> PATHS = List.of("botToken", "apiToken");
 
     public static void main(String[] args) throws IOException, InterruptedException {
         PropertyConfigurator.configure(Main.class.getClassLoader().getResourceAsStream("log4j2.properties"));
@@ -33,7 +35,9 @@ public class Main {
 
         File file = new File("./Translator/config.yml");
         new File("./Translator").mkdirs();
-        if (!file.exists()) file.createNewFile();
+        if (!file.exists()) {
+            getResourceAsFile("config.yml").renameTo(file);
+        }
         YamlFile config = YamlFile.loadConfiguration(file);
 
         for (String path : PATHS) {
@@ -42,10 +46,10 @@ public class Main {
                 System.exit(1);
             }
         }
-        translator = new Translator(config.getString("auth"));
+        translator = new Translator(config.getString("apiToken"));
 
         try {
-            jda = JDABuilder.create(config.getString("token"),
+            jda = JDABuilder.create(config.getString("botToken"),
                             List.of(GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MEMBERS, GatewayIntent.GUILD_MESSAGES, GatewayIntent.GUILD_PRESENCES))
                     .disableCache(CacheFlag.ACTIVITY, CacheFlag.VOICE_STATE, CacheFlag.EMOJI, CacheFlag.STICKER, CacheFlag.CLIENT_STATUS, CacheFlag.ONLINE_STATUS, CacheFlag.SCHEDULED_EVENTS)
                     .setActivity(Activity.playing(" with translations."))
@@ -59,5 +63,22 @@ public class Main {
         jda.awaitReady();
         jda.addEventListener(new TranslationListener());
         jda.updateCommands().addCommands(Commands.message("Translate!")).queue();
+    }
+
+    private static File getResourceAsFile(String resourcePath) {
+        try (InputStream in = ClassLoader.getSystemClassLoader().getResourceAsStream(resourcePath)){
+            if (in == null) return null;
+            File tempFile = File.createTempFile(String.valueOf(in.hashCode()), ".tmp");
+            tempFile.deleteOnExit();
+            try (FileOutputStream out = new FileOutputStream(tempFile)) {
+                byte[] buffer = new byte[1024];
+                int bytesRead;
+                while ((bytesRead = in.read(buffer)) != -1) out.write(buffer, 0, bytesRead);
+            }
+            return tempFile;
+        } catch (IOException e) {
+            log.error("Could not get resource as file", e);
+            return null;
+        }
     }
 }
