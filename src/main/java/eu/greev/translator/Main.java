@@ -62,7 +62,10 @@ public class Main {
         }
         jda.awaitReady();
         jda.addEventListener(new TranslationListener());
-        jda.updateCommands().addCommands(Commands.message("Translate!")).queue();
+        jda.updateCommands().addCommands(
+                Commands.message("Translate!"),
+                Commands.message("Translate! (silent)")
+        ).queue();
     }
 
     private static File getResourceAsFile(String resourcePath) {
