@@ -1,2 +1,5 @@
 botToken: "your discord bot token"
 apiToken: "your deepL api token"
+cooldown: # Those are just temporary number, feel free to customise them
+  messages: 20
+  perMinutes: 10
