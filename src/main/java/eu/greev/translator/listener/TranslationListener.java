@@ -18,17 +18,15 @@ import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.commands.Command;
 
 import java.awt.*;
-import java.time.Instant;
-import java.util.HashMap;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.*;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @RequiredArgsConstructor
 public class TranslationListener extends ListenerAdapter {
     private final MessageEmbed defaultEmbed = new EmbedBuilder().setColor(new Color(63, 226, 69, 255)).build();
-    private final HashMap<Long, Instant> alreadyTranslated = new HashMap<>();
+    private final List<Long> alreadyTranslated = new ArrayList<>();
     private final Translator translator;
     private final int cooldownMinutes;
     private final int maxMessages;
@@ -42,7 +40,7 @@ public class TranslationListener extends ListenerAdapter {
         }
 
         Message message = event.getTarget();
-        if (alreadyTranslated.containsKey(message.getIdLong())) {
+        if (alreadyTranslated.contains(message.getIdLong())) {
             event.replyEmbeds(new EmbedBuilder(defaultEmbed)
                     .setDescription("This message already got recently public translated.")
                     .build()
@@ -75,7 +73,7 @@ public class TranslationListener extends ListenerAdapter {
         }
 
         message.reply(result.getText()).queue(s -> {
-            alreadyTranslated.put(s.getIdLong(), Instant.now());
+            alreadyTranslated.add(s.getIdLong());
             startCooldownTimer(s.getIdLong());
         });
         event.replyEmbeds(new EmbedBuilder(defaultEmbed)
@@ -96,7 +94,7 @@ public class TranslationListener extends ListenerAdapter {
         }
 
         Message target = reference.resolve().complete();
-        if (alreadyTranslated.containsKey(target.getIdLong())) {
+        if (alreadyTranslated.contains(target.getIdLong())) {
             message.replyEmbeds(new EmbedBuilder(defaultEmbed)
                     .setDescription("This message already got recently public translated.")
                     .build()
@@ -122,7 +120,7 @@ public class TranslationListener extends ListenerAdapter {
             return;
         }
         target.reply(result.getText()).queue(s -> {
-            alreadyTranslated.put(s.getIdLong(), Instant.now());
+            alreadyTranslated.add(s.getIdLong());
             startCooldownTimer(s.getIdLong());
         });
     }
@@ -148,6 +146,6 @@ public class TranslationListener extends ListenerAdapter {
             public void run() {
                 alreadyTranslated.remove(messageId);
             }
-        }, 0, TimeUnit.MINUTES.toMillis(cooldownMinutes));
+        }, TimeUnit.MINUTES.toMillis(cooldownMinutes));
     }
 }
