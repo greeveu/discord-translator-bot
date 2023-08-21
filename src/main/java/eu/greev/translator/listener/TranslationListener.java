@@ -1,10 +1,8 @@
 package eu.greev.translator.listener;
 
-import com.deepl.api.DeepLException;
 import com.deepl.api.TextResult;
-import com.deepl.api.Translator;
-import com.deepl.api.Usage;
-import eu.greev.translator.classes.TranslationLimitReachedException;
+import eu.greev.translator.classes.exceptions.TranslationLimitReachedException;
+import eu.greev.translator.classes.services.TranslationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.dv8tion.jda.api.EmbedBuilder;
@@ -18,18 +16,13 @@ import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.commands.Command;
 
 import java.awt.*;
-import java.util.*;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @RequiredArgsConstructor
 public class TranslationListener extends ListenerAdapter {
     private final MessageEmbed defaultEmbed = new EmbedBuilder().setColor(new Color(63, 226, 69, 255)).build();
-    private final List<Long> alreadyTranslated = new ArrayList<>();
-    private final Translator translator;
-    private final int cooldownMinutes;
-    private final int maxMessages;
+    private final TranslationService translationService;
 
     @Override
     public void onMessageContextInteraction(MessageContextInteractionEvent event) {
@@ -40,7 +33,7 @@ public class TranslationListener extends ListenerAdapter {
         }
 
         Message message = event.getTarget();
-        if (alreadyTranslated.contains(message.getIdLong())) {
+        if (translationService.inCache(message.getIdLong())) {
             event.replyEmbeds(new EmbedBuilder(defaultEmbed)
                     .setDescription("This message already got recently public translated.")
                     .build()
@@ -48,8 +41,12 @@ public class TranslationListener extends ListenerAdapter {
             return;
         }
 
-        if (alreadyTranslated.size() >= maxMessages) {
-            event.reply(String.format("The maximum of %s translated messages per %d minutes has been reached, please wait until you can use translations again", maxMessages, cooldownMinutes))
+        if (translationService.hasCooldown(event.getUser().getIdLong())) {
+            event.reply(String.format(
+                            "Your maximum of %s translated messages per %d minutes has been reached, please wait until you can use translations again",
+                            translationService.getMaxMessages(),
+                            translationService.getCooldownMinutes()
+                    ))
                     .setEphemeral(true)
                     .queue();
             return;
@@ -57,9 +54,9 @@ public class TranslationListener extends ListenerAdapter {
 
         TextResult result;
         try {
-            result = getTranslatedResult(message, event.getUser().getName());
+            result = translationService.getTranslatedResult(message, event.getUser().getName());
         } catch (TranslationLimitReachedException e) {
-            event.reply("Translating this message would exceed the monthly translation limit.").setEphemeral(true).queue();
+            event.reply("The monthly translation limit is reached. Sorry.").setEphemeral(true).queue();
             return;
         }
         if (result == null) {
@@ -72,10 +69,8 @@ public class TranslationListener extends ListenerAdapter {
             return;
         }
 
-        message.reply(result.getText()).queue(s -> {
-            alreadyTranslated.add(s.getIdLong());
-            startCooldownTimer(s.getIdLong());
-        });
+        translationService.sendTranslation(result.getText(), message, event.getUser().getIdLong());
+
         event.replyEmbeds(new EmbedBuilder(defaultEmbed)
                 .setDescription(String.format("Successfully translated text from `%s` to `EN-GB`", result.getDetectedSourceLanguage()))
                 .build()
@@ -94,7 +89,7 @@ public class TranslationListener extends ListenerAdapter {
         }
 
         Message target = reference.resolve().complete();
-        if (alreadyTranslated.contains(target.getIdLong())) {
+        if (translationService.inCache(target.getIdLong())) {
             message.replyEmbeds(new EmbedBuilder(defaultEmbed)
                     .setDescription("This message already got recently public translated.")
                     .build()
@@ -102,50 +97,28 @@ public class TranslationListener extends ListenerAdapter {
             return;
         }
 
-        if (alreadyTranslated.size() >= maxMessages) {
-            message.reply(String.format("The maximum of %s translated messages per %d minutes has been reached, please wait until you can use translations again", maxMessages, cooldownMinutes))
+        if (translationService.hasCooldown(event.getAuthor().getIdLong())) {
+            message.reply(String.format(
+                            "Your maximum of %s translated messages per %d minutes has been reached, please wait until you can use translations again",
+                            translationService.getMaxMessages(),
+                            translationService.getCooldownMinutes()
+                    ))
                     .queue(s -> s.delete().queueAfter(1, TimeUnit.MINUTES));
             return;
         }
 
         TextResult result;
         try {
-            result = getTranslatedResult(target, event.getAuthor().getName());
+            result = translationService.getTranslatedResult(message, event.getAuthor().getName());
         } catch (TranslationLimitReachedException e) {
-            message.reply("Translating this message would exceed the monthly translation limit.").queue(s -> s.delete().queueAfter(1, TimeUnit.MINUTES));
+            message.reply("The monthly translation limit is reached. Sorry.").queue(s -> s.delete().queueAfter(1, TimeUnit.MINUTES));
             return;
         }
         if (result == null) {
             message.reply("Could not translate text, please contact the server owner!").queue();
             return;
         }
-        target.reply(result.getText()).queue(s -> {
-            alreadyTranslated.add(s.getIdLong());
-            startCooldownTimer(s.getIdLong());
-        });
-    }
 
-    private TextResult getTranslatedResult(Message message, String requester) throws TranslationLimitReachedException {
-        String toTranslate = message.getContentRaw();
-        try {
-            Usage.Detail character = translator.getUsage().getCharacter();
-            if (character != null && (character.getCount() + toTranslate.split(" ").length) > character.getLimit()) {
-                throw new TranslationLimitReachedException("The translation word limit of " + character.getLimit() + " got reached.");
-            }
-            log.info(requester + " requested a translation.");
-            return translator.translateText(toTranslate, null, "EN-GB");
-        } catch (DeepLException | InterruptedException e) {
-            log.error("Could not translate text:", e);
-        }
-        return null;
-    }
-
-    private void startCooldownTimer(long messageId) {
-        new Timer().schedule(new TimerTask() {
-            @Override
-            public void run() {
-                alreadyTranslated.remove(messageId);
-            }
-        }, TimeUnit.MINUTES.toMillis(cooldownMinutes));
+        translationService.sendTranslation(result.getText(), message, event.getAuthor().getIdLong());
     }
 }

@@ -1,8 +1,8 @@
 package eu.greev.translator;
 
 import com.deepl.api.Translator;
+import eu.greev.translator.classes.services.TranslationService;
 import eu.greev.translator.listener.TranslationListener;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -46,6 +46,7 @@ public class Main {
             }
         }
         Translator translator = new Translator(config.getString("apiToken"));
+        TranslationService translationService = new TranslationService(translator, config.getInt("cooldown.perMinutes"), config.getInt("cooldown.messages"));
 
         try {
             jda = JDABuilder.create(config.getString("botToken"),
@@ -60,7 +61,7 @@ public class Main {
             System.exit(1);
         }
         jda.awaitReady();
-        jda.addEventListener(new TranslationListener(translator, config.getInt("cooldown.perMinutes"), config.getInt("cooldown.messages")));
+        jda.addEventListener(new TranslationListener(translationService));
         jda.updateCommands().addCommands(
                 Commands.message("Translate!"),
                 Commands.message("Translate! (silent)")

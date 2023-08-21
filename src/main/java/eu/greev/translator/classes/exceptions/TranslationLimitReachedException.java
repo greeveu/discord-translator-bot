@@ -1,4 +1,4 @@
-package eu.greev.translator.classes;
+package eu.greev.translator.classes.exceptions;
 
 public class TranslationLimitReachedException extends Exception {
 
