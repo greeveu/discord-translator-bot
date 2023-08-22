@@ -1,8 +1,8 @@
 package eu.greev.translator;
 
 import com.deepl.api.Translator;
+import eu.greev.translator.classes.services.TranslationService;
 import eu.greev.translator.listener.TranslationListener;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -26,8 +26,7 @@ import java.util.List;
 
 @Slf4j
 public class Main {
-    @Getter private static Translator translator = null;
-    private static final List<String> PATHS = List.of("botToken", "apiToken");
+    private static final List<String> PATHS = List.of("botToken", "apiToken", "cooldown.messages", "cooldown.perMinutes");
 
     public static void main(String[] args) throws IOException, InterruptedException {
         PropertyConfigurator.configure(Main.class.getClassLoader().getResourceAsStream("log4j2.properties"));
@@ -41,12 +40,13 @@ public class Main {
         YamlFile config = YamlFile.loadConfiguration(file);
 
         for (String path : PATHS) {
-            if (!config.isSet(path) || Strings.isEmpty(config.getString(path))) {
-                log.error(String.format("No valid config provided! Add your token into `./Translator/config.yml` with the key `%s`", path));
+            if (!config.isSet(path) || Strings.isEmpty(config.get(path).toString())) {
+                log.error(String.format("No valid config provided! Please add a correct property with the path `%s`%nIf you feel unsure, take a look into the default config", path));
                 System.exit(1);
             }
         }
-        translator = new Translator(config.getString("apiToken"));
+        Translator translator = new Translator(config.getString("apiToken"));
+        TranslationService translationService = new TranslationService(translator, config.getInt("cooldown.perMinutes"), config.getInt("cooldown.messages"));
 
         try {
             jda = JDABuilder.create(config.getString("botToken"),
@@ -61,12 +61,15 @@ public class Main {
             System.exit(1);
         }
         jda.awaitReady();
-        jda.addEventListener(new TranslationListener());
-        jda.updateCommands().addCommands(Commands.message("Translate!")).queue();
+        jda.addEventListener(new TranslationListener(translationService));
+        jda.updateCommands().addCommands(
+                Commands.message("Translate!"),
+                Commands.message("Translate! (silent)")
+        ).queue();
     }
 
     private static File getResourceAsFile(String resourcePath) {
-        try (InputStream in = ClassLoader.getSystemClassLoader().getResourceAsStream(resourcePath)){
+        try (InputStream in = ClassLoader.getSystemClassLoader().getResourceAsStream(resourcePath)) {
             if (in == null) return null;
             File tempFile = File.createTempFile(String.valueOf(in.hashCode()), ".tmp");
             tempFile.deleteOnExit();
