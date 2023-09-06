@@ -109,7 +109,7 @@ public class TranslationListener extends ListenerAdapter {
 
         TextResult result;
         try {
-            result = translationService.getTranslatedResult(message, event.getAuthor().getName());
+            result = translationService.getTranslatedResult(target, event.getAuthor().getName());
         } catch (TranslationLimitReachedException e) {
             message.reply("The monthly translation limit is reached. Sorry.").queue(s -> s.delete().queueAfter(1, TimeUnit.MINUTES));
             return;
@@ -119,6 +119,6 @@ public class TranslationListener extends ListenerAdapter {
             return;
         }
 
-        translationService.sendTranslation(result.getText(), message, event.getAuthor().getIdLong());
+        translationService.sendTranslation(result.getText(), target, event.getAuthor().getIdLong());
     }
 }
